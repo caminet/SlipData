@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+<title>My Expense Data</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+/* ══════════════════════════════════════
+   RESET & BASE
+══════════════════════════════════════ */
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#f0f0f0;font-family:-apple-system,'Segoe UI',sans-serif;font-size:15px}
+body{display:flex;justify-content:center;align-items:flex-start;min-height:100vh}
+
+/* ══════════════════════════════════════
+   APP SHELL
+══════════════════════════════════════ */
+#app{
+  width:100%;max-width:420px;min-height:100vh;
+  background:#fff;display:flex;flex-direction:column;
+  box-shadow:0 0 20px rgba(0,0,0,.08);position:relative;
+}
+
+/* ══════════════════════════════════════
+   BANNER
+══════════════════════════════════════ */
+.banner{
+  text-align:center;font-size:18px;font-weight:700;letter-spacing:.3px;
+  padding:14px 16px 12px;border-bottom:2px solid #111;background:#fff;flex-shrink:0;
+}
+
+/* ══════════════════════════════════════
+   BOX 1 — UPLOAD
+══════════════════════════════════════ */
+.box1{
+  margin:12px 12px 8px;border:1.5px solid #ccc;border-radius:8px;
+  padding:12px;position:relative;background:#fff;
+}
+.box1-close{
+  position:absolute;top:8px;right:10px;font-size:17px;cursor:pointer;
+  color:#888;line-height:1;z-index:2;
+}
+.box1-close:hover{color:#111}
+
+/* Drop zone */
+.drop-zone{
+  border:2px dashed #aaa;border-radius:6px;min-height:148px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  cursor:pointer;transition:border-color .2s,background .2s;
+  position:relative;overflow:hidden;background:#fafafa;
+}
+.drop-zone.has-image{border-color:#333;border-style:solid;background:#000}
+.drop-zone.drag-over{border-color:#111;background:#f5f5f5}
+
+.dz-empty{display:flex;flex-direction:column;align-items:center;gap:4px;padding:12px}
+.dz-icon{margin-bottom:4px}
+.dz-link{color:#4a90d9;font-size:14px;font-weight:600;text-decoration:underline}
+.dz-sub{color:#999;font-size:12px}
+
+/* Preview image */
+#previewImg{
+  width:100%;height:100%;object-fit:contain;
+  position:absolute;inset:0;max-height:220px;
+}
+
+/* ── Upload progress overlay ── */
+.upload-overlay{
+  position:absolute;inset:0;background:rgba(255,255,255,.96);
+  display:none;flex-direction:column;align-items:center;justify-content:center;
+  border-radius:6px;z-index:10;gap:2px;
+}
+.circle-wrap{position:relative;width:80px;height:80px;margin-bottom:6px}
+.c-svg{transform:rotate(-90deg);display:block}
+.c-bg  {fill:none;stroke:#e0e0e0;stroke-width:8}
+.c-fill{
+  fill:none;stroke:#111;stroke-width:8;stroke-linecap:round;
+  stroke-dasharray:220;stroke-dashoffset:220;transition:stroke-dashoffset .25s linear;
+}
+.c-pct{
+  position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:16px;font-weight:700;color:#111;
+}
+.up-label{font-size:13px;color:#555;margin-bottom:6px}
+.btn-cancel{
+  padding:5px 20px;border:1.5px solid #ccc;border-radius:4px;
+  background:#fff;font-size:13px;cursor:pointer;color:#555;
+}
+.btn-cancel:hover{border-color:#888;color:#111}
+
+/* Bottom row */
+.box1-bottom{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:10px;padding:0 2px;
+}
+.btn-camera{background:none;border:none;cursor:pointer;padding:4px;line-height:0}
+.btn-camera:active{opacity:.6}
+.btn-upload{
+  padding:7px 24px;border:1.5px solid #bbb;border-radius:5px;
+  background:#fff;font-size:13px;cursor:pointer;color:#aaa;
+  transition:all .2s;font-weight:500;
+}
+.btn-upload.ready{border-color:#111;color:#111;font-weight:700}
+.btn-upload:disabled{cursor:default}
+
+/* ══════════════════════════════════════
+   BOX 2 — RECORD LIST
+══════════════════════════════════════ */
+.box2{
+  margin:0 12px;border:1.5px solid #ccc;border-radius:8px;
+  flex:1;min-height:200px;overflow:hidden;display:flex;flex-direction:column;
+}
+.record-list{flex:1;overflow-y:auto;padding:2px 0}
+.record-item{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 10px;border-bottom:1px solid #f0f0f0;
+  transition:background .15s;
+}
+.record-item:last-child{border-bottom:none}
+.record-item:active{background:#f8f8f8}
+.rec-bar{width:4px;align-self:stretch;border-radius:2px;flex-shrink:0}
+.bar-bank{background:#111}.bar-receipt{background:#888}
+.rec-num{font-size:12px;color:#999;min-width:22px;flex-shrink:0}
+.rec-info{flex:1;min-width:0}
+.rec-date{font-size:13px;color:#111;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rec-type{font-size:11px;color:#999;margin-top:1px}
+.rec-amt{font-size:13px;font-weight:700;color:#111;white-space:nowrap;flex-shrink:0}
+.btn-view{
+  background:none;border:none;cursor:pointer;padding:4px 6px;
+  color:#aaa;flex-shrink:0;line-height:0;
+}
+.btn-view:hover{color:#111}
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 20px;color:#ccc;text-align:center;gap:8px;flex:1;
+}
+.empty-icon{font-size:36px;opacity:.4}
+.empty-text{font-size:13px;line-height:1.6}
+
+/* ══════════════════════════════════════
+   BOTTOM BAR
+══════════════════════════════════════ */
+.bottom-bar{
+  margin:10px 12px 14px;display:flex;gap:8px;flex-shrink:0;
+}
+.btn-bot{
+  flex:1;padding:11px 0;background:#111;color:#fff;
+  border:none;border-radius:6px;font-size:14px;font-weight:700;
+  cursor:pointer;transition:opacity .2s;letter-spacing:.3px;
+}
+.btn-bot:hover{opacity:.85}
+.btn-bot:active{opacity:.7}
+
+/* ══════════════════════════════════════
+   MODAL SYSTEM
+══════════════════════════════════════ */
+.modal-bg{
+  position:fixed;inset:0;background:rgba(0,0,0,.5);
+  z-index:200;display:flex;align-items:flex-end;justify-content:center;
+  opacity:0;pointer-events:none;transition:opacity .25s;
+}
+.modal-bg.open{opacity:1;pointer-events:all}
+.modal{
+  background:#fff;width:100%;max-width:420px;
+  border-radius:16px 16px 0 0;max-height:88vh;
+  overflow-y:auto;padding:16px 16px 32px;
+  transform:translateY(40px);transition:transform .25s;
+}
+.modal-bg.open .modal{transform:translateY(0)}
+.modal-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.modal-title{font-size:16px;font-weight:700;color:#111}
+.btn-x{
+  background:none;border:none;font-size:22px;cursor:pointer;
+  color:#888;line-height:1;padding:0 4px;
+}
+.btn-x:hover{color:#111}
+
+/* Detail rows */
+.det-row{padding:9px 0;border-bottom:1px solid #f0f0f0}
+.det-row:last-child{border-bottom:none}
+.det-label{font-size:11px;color:#999;margin-bottom:3px;text-transform:uppercase;letter-spacing:.04em}
+.det-val{font-size:14px;color:#111;font-weight:500}
+.det-hero{
+  font-size:22px;font-weight:700;color:#111;
+  text-align:center;padding:12px 0 4px;
+}
+.det-sub{text-align:center;font-size:13px;color:#777;margin-bottom:12px}
+.slip-img{width:100%;border-radius:8px;border:1px solid #eee;margin-top:10px}
+
+/* ── Calendar ── */
+.cal-nav{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:10px;
+}
+.cal-nav-btn{
+  background:none;border:1.5px solid #ddd;border-radius:5px;
+  padding:5px 12px;cursor:pointer;font-size:14px;color:#555;
+}
+.cal-nav-btn:hover{border-color:#999;color:#111}
+.cal-month{font-size:15px;font-weight:700;color:#111}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}
+.cal-hd{font-size:11px;color:#999;padding:4px 0;font-weight:600}
+.cal-cell{
+  aspect-ratio:1;display:flex;align-items:center;justify-content:center;
+  font-size:13px;border-radius:6px;cursor:pointer;position:relative;
+  border:1.5px solid transparent;transition:all .15s;
+}
+.cal-cell:hover:not(.cal-empty){background:#f0f0f0}
+.cal-cell.today{border-color:#111;font-weight:700}
+.cal-cell.selected{background:#111!important;color:#fff!important;border-color:#111}
+.cal-cell.has-dot::after{
+  content:'';width:4px;height:4px;background:#555;border-radius:50%;
+  position:absolute;bottom:3px;left:50%;transform:translateX(-50%);
+}
+.cal-cell.selected.has-dot::after{background:#fff}
+.cal-empty{cursor:default}
+
+/* History / Export result */
+.result-hd{font-size:13px;font-weight:700;color:#555;margin:12px 0 6px}
+.result-item{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:8px 0;border-bottom:1px solid #f0f0f0;
+}
+.result-item:last-child{border-bottom:none}
+.res-bar{width:3px;align-self:stretch;border-radius:2px;flex-shrink:0;margin-top:2px}
+.res-main{flex:1;min-width:0}
+.res-datetime{font-size:13px;font-weight:600;color:#111}
+.res-from{font-size:12px;color:#777;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.res-amt{font-size:13px;font-weight:700;color:#111;white-space:nowrap}
+
+.export-summary{
+  background:#f8f8f8;border-radius:8px;padding:10px 14px;
+  margin:10px 0;font-size:13px;color:#555;
+  display:flex;justify-content:space-between;align-items:center;
+}
+.export-summary strong{font-size:15px;color:#111}
+.btn-do-export{
+  width:100%;padding:12px;background:#111;color:#fff;
+  border:none;border-radius:8px;font-size:15px;font-weight:700;
+  cursor:pointer;margin-top:10px;letter-spacing:.3px;
+  transition:opacity .2s;display:none;
+}
+.btn-do-export:hover{opacity:.85}
+.btn-do-export.show{display:block}
+.no-record{text-align:center;color:#bbb;font-size:13px;padding:20px 0}
+
+/* ── Record actions (trash + note + view) ── */
+.rec-actions{display:flex;align-items:center;gap:2px;flex-shrink:0}
+.btn-action{
+  background:none;border:none;cursor:pointer;
+  padding:5px;border-radius:5px;line-height:0;
+  transition:background .15s;
+}
+.btn-action:hover{background:#f0f0f0}
+.btn-view{color:#888}.btn-view:hover{color:#111}
+.btn-note{color:#888}.btn-note:hover{color:#444}
+.btn-del{color:#bbb}.btn-del:hover{color:#c00;background:#fff0f0}
+.rec-note{font-size:11px;color:#888;margin-top:2px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+
+/* ── Income / Expense Tag ── */
+.rec-date-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.rec-date{font-size:13px;color:#111}
+.rec-tag{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;
+  cursor:pointer;user-select:none;transition:all .15s;white-space:nowrap;
+  letter-spacing:.02em;
+}
+.tag-income{background:#e6f4ec;color:#1a7a3c;border:1px solid #a8d5b5}
+.tag-income:hover{background:#d0ecda}
+.tag-expense{background:#fdecea;color:#c0392b;border:1px solid #f5b7b1}
+.tag-expense:hover{background:#fbd7d4}
+.amt-income{font-size:13px;font-weight:700;color:#1a7a3c;white-space:nowrap;flex-shrink:0}
+.amt-expense{font-size:13px;font-weight:700;color:#c0392b;white-space:nowrap;flex-shrink:0}
+
+/* ── Summary income/expense colors ── */
+.sum-income-lbl{color:#1a7a3c;font-weight:600}
+.sum-income-val{color:#1a7a3c;font-weight:700}
+.sum-expense-lbl{color:#c0392b;font-weight:600}
+.sum-expense-val{color:#c0392b;font-weight:700}
+
+/* ── Summary Bar ── */
+.summary-bar{
+  margin:0 12px 8px;border:1.5px solid #111;border-radius:8px;
+  padding:10px 14px;background:#fff;
+}
+.sum-row{display:flex;justify-content:space-between;align-items:center;padding:3px 0}
+.sum-label{font-size:12px;color:#666}
+.sum-val{font-size:13px;color:#111;font-weight:500}
+.sum-divider{height:1px;background:#eee;margin:6px 0}
+.sum-total-row{padding-top:4px}
+.sum-total-label{font-size:13px;font-weight:700;color:#111}
+.sum-total-val{font-size:16px;font-weight:700;color:#111}
+
+/* ── Note Modal ── */
+.note-info{font-size:13px;color:#777;margin-bottom:10px;
+  padding:8px 12px;background:#f8f8f8;border-radius:6px}
+.note-textarea{
+  width:100%;min-height:90px;padding:10px 12px;
+  border:1.5px solid #ddd;border-radius:6px;
+  font-size:14px;color:#111;resize:none;outline:none;
+  font-family:inherit;transition:border-color .15s;
+}
+.note-textarea:focus{border-color:#111}
+.btn-save-note{
+  width:100%;padding:12px;background:#111;color:#fff;
+  border:none;border-radius:8px;font-size:15px;font-weight:700;
+  cursor:pointer;margin-top:10px;transition:opacity .2s;
+}
+.btn-save-note:hover{opacity:.85}
+
+
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ─── BANNER ─── -->
+  <div class="banner">My Expense Data</div>
+
+  <!-- ─── BOX 1 : UPLOAD ─── -->
+  <div class="box1" id="box1">
+    <span class="box1-close" onclick="resetBox()" title="ล้างหน้าต่าง">✕</span>
+
+    <!-- Drop zone -->
+    <div class="drop-zone" id="dropZone" onclick="handleDropClick()">
+
+      <!-- Empty state -->
+      <div class="dz-empty" id="dzEmpty">
+        <div class="dz-icon">
+          <svg width="52" height="52" viewBox="0 0 52 52" fill="none">
+            <rect x="7" y="4" width="28" height="36" rx="3" fill="#d0e3ff" stroke="#4a90d9" stroke-width="1.5"/>
+            <rect x="13" y="14" width="16" height="2" rx="1" fill="#4a90d9" opacity=".5"/>
+            <rect x="13" y="19" width="12" height="2" rx="1" fill="#4a90d9" opacity=".35"/>
+            <rect x="13" y="24" width="8"  height="2" rx="1" fill="#4a90d9" opacity=".25"/>
+            <circle cx="39" cy="39" r="11" fill="#4a90d9"/>
+            <line x1="39" y1="33" x2="39" y2="45" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="33" y1="39" x2="45" y2="39" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+          </svg>
+        </div>
+        <div><span class="dz-link">Select a file to upload</span></div>
+        <div class="dz-sub">or drag and drop it here</div>
+      </div>
+
+      <!-- Preview -->
+      <img id="previewImg" src="" alt="preview" style="display:none"/>
+
+      <!-- Upload progress -->
+      <div class="upload-overlay" id="uploadOverlay">
+        <div class="circle-wrap">
+          <svg class="c-svg" width="80" height="80" viewBox="0 0 80 80">
+            <circle class="c-bg"   cx="40" cy="40" r="35"/>
+            <circle class="c-fill" cx="40" cy="40" r="35" id="arcFill"/>
+          </svg>
+          <div class="c-pct" id="arcPct">0%</div>
+        </div>
+        <div class="up-label">Uploading file...</div>
+        <button class="btn-cancel" onclick="cancelUpload(event)">Cancel</button>
+      </div>
+    </div><!-- /drop-zone -->
+
+    <!-- Hidden file inputs -->
+    <input type="file" id="inputGallery" accept="image/*"
+           style="display:none" onchange="onFileSelected(this)"/>
+    <input type="file" id="inputCamera"  accept="image/*" capture="environment"
+           style="display:none" onchange="onFileSelected(this)"/>
+
+    <!-- Bottom controls -->
+    <div class="box1-bottom">
+      <button class="btn-camera" onclick="openCamera(event)" title="ถ่ายรูป">
+        <svg width="34" height="34" viewBox="0 0 34 34" fill="none">
+          <rect x="2" y="9" width="30" height="21" rx="3.5" fill="#111"/>
+          <circle cx="17" cy="19.5" r="6" fill="#fff" stroke="#111" stroke-width="1"/>
+          <circle cx="17" cy="19.5" r="3.2" fill="#111"/>
+          <path d="M12 9 L14 6 L20 6 L22 9" fill="#111" stroke="#111" stroke-width=".5"/>
+          <circle cx="27" cy="14" r="1.8" fill="#fff"/>
+        </svg>
+      </button>
+      <button class="btn-upload" id="btnUpload" disabled onclick="startUpload()">Upload</button>
+    </div>
+  </div><!-- /box1 -->
+
+  <!-- ─── BOX 2 : RECORD LIST ─── -->
+  <div class="box2">
+    <div class="record-list" id="recordList"></div>
+  </div>
+
+  <!-- ─── SUMMARY BAR ─── -->
+  <div class="summary-bar" id="summaryBar" style="display:none">
+    <div class="sum-row">
+      <span class="sum-label">รายการทั้งหมด</span>
+      <span class="sum-val" id="sumCount">0 รายการ</span>
+    </div>
+    <div class="sum-divider"></div>
+    <div class="sum-row">
+      <span class="sum-label sum-income-lbl">▲ รายรับ</span>
+      <span class="sum-val sum-income-val" id="sumIncome">+0.00 ฿</span>
+    </div>
+    <div class="sum-row">
+      <span class="sum-label sum-expense-lbl">▼ รายจ่าย</span>
+      <span class="sum-val sum-expense-val" id="sumExpense">−0.00 ฿</span>
+    </div>
+    <div class="sum-row">
+      <span class="sum-label">🏦 สลิปธนาคาร</span>
+      <span class="sum-val" id="sumBank">0.00 ฿</span>
+    </div>
+    <div class="sum-row">
+      <span class="sum-label">🧾 ใบเสร็จ</span>
+      <span class="sum-val" id="sumReceipt">0.00 ฿</span>
+    </div>
+    <div class="sum-divider"></div>
+    <div class="sum-row">
+      <span class="sum-label" style="font-weight:600">คงเหลือสุทธิ</span>
+      <span class="sum-val" id="sumBalance" style="font-weight:700">0.00 ฿</span>
+    </div>
+    <div class="sum-row sum-total-row">
+      <span class="sum-total-label">ยอดรวมทั้งหมด</span>
+      <span class="sum-total-val" id="sumTotal">0.00 ฿</span>
+    </div>
+  </div>
+
+  <!-- ─── BOTTOM BAR ─── -->
+  <div class="bottom-bar">
+    <button class="btn-bot" onclick="openHistory()">History</button>
+    <button class="btn-bot" onclick="openExport()">Export</button>
+  </div>
+
+</div><!-- /app -->
+
+<!-- ════════════ MODAL: NOTE ════════════ -->
+<div class="modal-bg" id="mdNote">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">หมายเหตุ</span>
+      <button class="btn-x" onclick="closeModal('mdNote')">✕</button>
+    </div>
+    <div id="noteRecordInfo" class="note-info"></div>
+    <textarea id="noteText" class="note-textarea"
+              placeholder="พิมพ์หมายเหตุสั้น ๆ เช่น ค่าอาหาร, ค่าน้ำมัน..."></textarea>
+    <button class="btn-save-note" onclick="saveNote()">💾 บันทึกหมายเหตุ</button>
+  </div>
+</div>
+
+</div><!-- /app -->
+
+<!-- ════════════ MODAL: DETAIL ════════════ -->
+<div class="modal-bg" id="mdDetail">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title" id="dtTitle">รายละเอียด</span>
+      <button class="btn-x" onclick="closeModal('mdDetail')">✕</button>
+    </div>
+    <div id="dtBody"></div>
+  </div>
+</div>
+
+<!-- ════════════ MODAL: HISTORY ════════════ -->
+<div class="modal-bg" id="mdHistory">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">History</span>
+      <button class="btn-x" onclick="closeModal('mdHistory')">✕</button>
+    </div>
+    <div id="histCal"></div>
+    <div id="histResult"></div>
+  </div>
+</div>
+
+<!-- ════════════ MODAL: EXPORT ════════════ -->
+<div class="modal-bg" id="mdExport">
+  <div class="modal">
+    <div class="modal-hd">
+      <span class="modal-title">Export</span>
+      <button class="btn-x" onclick="closeModal('mdExport')">✕</button>
+    </div>
+    <div id="expCal"></div>
+    <div id="expResult"></div>
+    <div class="export-summary" id="expSummary" style="display:none">
+      <span id="expSumLabel">รายการที่เลือก</span>
+      <strong id="expSumTotal">0.00 ฿</strong>
+    </div>
+    <button class="btn-do-export" id="btnDoExport" onclick="doExport()">
+      ⬇ Export เป็น Excel (.xlsx)
+    </button>
+  </div>
+</div>
+
+
+
+
+<script>
+// === dbs.js ===
+
+// === dbs.js inlined ===
+// ============================================================
+// MySlipData — Database & Storage Module (dbs.js)
+// localStorage-based: works fully offline / mobile browser
+// ============================================================
+
+var DB = (function () {
+
+  var KEY     = 'myslipdata_records';
+  var LOG_KEY = 'myslipdata_exportlogs';
+
+  // ── CRUD ──────────────────────────────────────────────────
+  function getAll() {
+    try { return JSON.parse(localStorage.getItem(KEY) || '[]'); }
+    catch (e) { return []; }
+  }
+
+  function save(records) {
+    localStorage.setItem(KEY, JSON.stringify(records));
+  }
+
+  function insert(record) {
+    var records = getAll();
+    record.id         = Date.now() + Math.floor(Math.random() * 1000);
+    record.created_at = new Date().toISOString();
+    records.unshift(record);
+    save(records);
+    return record;
+  }
+
+  function getById(id) {
+    return getAll().find(function (r) { return r.id == id; }) || null;
+  }
+
+  function deleteById(id) {
+    save(getAll().filter(function (r) { return r.id != id; }));
+  }
+
+  // ── Query ─────────────────────────────────────────────────
+  function getByDate(dateStr) {
+    return getAll().filter(function (r) { return r.record_date === dateStr; });
+  }
+
+  function getByDateRange(from, to) {
+    return getAll().filter(function (r) {
+      return r.record_date >= from && r.record_date <= to;
+    });
+  }
+
+  function getByMonth(year, month) {
+    var prefix = year + '-' + String(month).padStart(2, '0');
+    return getAll().filter(function (r) {
+      return r.record_date && r.record_date.startsWith(prefix);
+    });
+  }
+
+  // ── Parse slip / receipt text (OCR output) ────────────────
+  function parseSlipText(text) {
+    var result = {
+      record_date: null, record_time: null,
+      from_party: null,  to_party: null,
+      amount: 0,         slip_type: 'bank_slip'
+    };
+
+    // Date: DD/MM/YYYY or YYYY-MM-DD or DD-MM-YYYY
+    var dm = text.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+    var ym = text.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (dm) {
+      result.record_date = dm[3] + '-' + String(dm[2]).padStart(2,'0') + '-' + String(dm[1]).padStart(2,'0');
+    } else if (ym) {
+      result.record_date = ym[1] + '-' + String(ym[2]).padStart(2,'0') + '-' + String(ym[3]).padStart(2,'0');
+    } else {
+      result.record_date = new Date().toISOString().split('T')[0];
+    }
+
+    // Time HH:MM or HH:MM:SS
+    var tm = text.match(/(\d{1,2}):(\d{2})(?::(\d{2}))?/);
+    if (tm) {
+      result.record_time = String(tm[1]).padStart(2,'0') + ':' + tm[2] + ':' + (tm[3] || '00');
+    } else {
+      result.record_time = new Date().toTimeString().slice(0, 8);
+    }
+
+    // Amount — priority: grand total > total > amount > ยอดรวม > ฿
+    var amtPatterns = [
+      /grand\s*total[\s:฿$]*([\d,]+\.?\d*)/i,
+      /total[\s:฿$]*([\d,]+\.?\d*)/i,
+      /amount[\s:฿$]*([\d,]+\.?\d*)/i,
+      /ยอดรวม[\s:฿]*([\d,]+\.?\d*)/,
+      /จำนวนเงิน[\s:฿]*([\d,]+\.?\d*)/,
+      /฿\s*([\d,]+\.?\d*)/,
+      /([\d]{1,3}(?:,\d{3})*(?:\.\d{2})?)\s*(?:บาท|THB)/i
+    ];
+    for (var i = 0; i < amtPatterns.length; i++) {
+      var am = text.match(amtPatterns[i]);
+      if (am) { result.amount = parseFloat(am[1].replace(/,/g, '')); break; }
+    }
+
+    // From / To
+    var fromM = text.match(/(?:from|จาก|ผู้โอน|บัญชีต้นทาง)[:\s]+([^\n\r]+)/i);
+    if (fromM) result.from_party = fromM[1].trim();
+    var toM = text.match(/(?:to|ไปยัง|ผู้รับ|บัญชีปลายทาง)[:\s]+([^\n\r]+)/i);
+    if (toM) result.to_party = toM[1].trim();
+
+    // Type
+    result.slip_type = /receipt|ใบเสร็จ|tax invoice/i.test(text) ? 'receipt' : 'bank_slip';
+
+    return result;
+  }
+
+  // ── Export log ────────────────────────────────────────────
+  function logExport(dateFrom, dateTo, records) {
+    var logs  = JSON.parse(localStorage.getItem(LOG_KEY) || '[]');
+    var total = records.reduce(function (s, r) { return s + parseFloat(r.amount || 0); }, 0);
+    logs.unshift({
+      id: Date.now(),
+      export_date:  new Date().toISOString().split('T')[0],
+      date_from:    dateFrom,
+      date_to:      dateTo,
+      record_count: records.length,
+      total_amount: total,
+      file_name:    'Export.xlsx'
+    });
+    localStorage.setItem(LOG_KEY, JSON.stringify(logs));
+  }
+
+  // ── Clear ─────────────────────────────────────────────────
+  function clearAll() {
+    localStorage.removeItem(KEY);
+    localStorage.removeItem(LOG_KEY);
+  }
+
+  // ── Public API ────────────────────────────────────────────
+  return {
+    KEY:           KEY,
+    LOG_KEY:       LOG_KEY,
+    getAll:        getAll,
+    save:          save,
+    insert:        insert,
+    getById:       getById,
+    delete:        deleteById,
+    getByDate:     getByDate,
+    getByDateRange:getByDateRange,
+    getByMonth:    getByMonth,
+    parseSlipText: parseSlipText,
+    logExport:     logExport,
+    clearAll:      clearAll
+  };
+
+})();
+// DB is now a global variable — accessible everywhere in the browser
+
+
+
+// === main app ===
+
+/* ════════════════════════════════════════════════════
+   STATE
+════════════════════════════════════════════════════ */
+let selectedFile   = null;
+let previewDataURL = null;
+let uploadTimer    = null;
+
+let histCurDate  = new Date();
+let histSelected = null;
+let expCurDate   = new Date();
+let expSelected  = null;
+
+const CIRC = 2 * Math.PI * 35; // r=35
+
+/* ════════════════════════════════════════════════════
+   FILE SELECT
+════════════════════════════════════════════════════ */
+function handleDropClick(){
+  if(selectedFile) return;
+  document.getElementById('inputGallery').click();
+}
+function openCamera(e){
+  e.stopPropagation();
+  document.getElementById('inputCamera').click();
+}
+
+function onFileSelected(input){
+  const file = input.files[0];
+  if(!file) return;
+  selectedFile = file;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    previewDataURL = ev.target.result;
+    const img = document.getElementById('previewImg');
+    img.src = previewDataURL;
+    img.style.display = 'block';
+    document.getElementById('dzEmpty').style.display = 'none';
+    document.getElementById('dropZone').classList.add('has-image');
+    const btn = document.getElementById('btnUpload');
+    btn.disabled = false;
+    btn.classList.add('ready');
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+/* ════════════════════════════════════════════════════
+   UPLOAD + PROGRESS CIRCLE
+════════════════════════════════════════════════════ */
+function startUpload(){
+  if(!selectedFile) return;
+  const overlay = document.getElementById('uploadOverlay');
+  overlay.style.display = 'flex';
+  document.getElementById('btnUpload').disabled = true;
+
+  const arc = document.getElementById('arcFill');
+  const pctEl = document.getElementById('arcPct');
+  arc.style.strokeDasharray  = CIRC;
+  arc.style.strokeDashoffset = CIRC;
+
+  let pct = 0;
+  uploadTimer = setInterval(() => {
+    pct += Math.random() * 14 + 4;
+    if(pct > 100) pct = 100;
+    arc.style.strokeDashoffset = CIRC - (pct / 100) * CIRC;
+    pctEl.textContent = Math.round(pct) + '%';
+    if(pct >= 100){
+      clearInterval(uploadTimer);
+      uploadTimer = null;
+      setTimeout(finishUpload, 350);
+    }
+  }, 130);
+}
+
+function cancelUpload(e){
+  if(e) e.stopPropagation();
+  clearInterval(uploadTimer); uploadTimer = null;
+  document.getElementById('uploadOverlay').style.display = 'none';
+  const btn = document.getElementById('btnUpload');
+  btn.disabled = false;
+}
+
+function finishUpload(){
+  document.getElementById('uploadOverlay').style.display = 'none';
+  // ส่งรูปให้ Claude Vision อ่านอัตโนมัติ
+  analyzeSlipWithAI();
+}
+
+/* ════════════════════════════════════════════════════
+   CLAUDE VISION — อ่าน slip / ใบเสร็จ อัตโนมัติ
+════════════════════════════════════════════════════ */
+async function analyzeSlipWithAI(){
+  // แสดง loading state
+  showAnalyzing(true);
+
+  try {
+    // แปลงรูปเป็น base64 (ตัด header data:image/xxx;base64, ออก)
+    const base64 = previewDataURL.split(',')[1];
+    const mimeType = previewDataURL.split(';')[0].split(':')[1];
+
+    const prompt = `คุณคือผู้ช่วยอ่านข้อมูลจาก slip ธนาคาร และใบเสร็จร้านค้า
+
+กรุณาอ่านข้อมูลจากภาพนี้และตอบกลับเป็น JSON เท่านั้น ห้ามมีข้อความอื่น รูปแบบ:
+{
+  "record_date": "YYYY-MM-DD",
+  "record_time": "HH:MM:SS",
+  "amount": 0.00,
+  "from_party": "ชื่อผู้โอน หรือ ร้านค้า",
+  "to_party": "ชื่อผู้รับ หรือ บริการ",
+  "slip_type": "bank_slip หรือ receipt"
+}
+
+กฎสำคัญ:
+- amount = ช่อง "จำนวนเงิน" หรือ "จำนวน" เท่านั้น ไม่ใช่ยอดคงเหลือ
+- ถ้าปีเป็นพุทธศักราช (เช่น 2568, 2569) ให้แปลงเป็นคริสต์ศักราชด้วยการลบ 543
+- slip_type: ถ้าเป็นสลิปธนาคาร/โอนเงิน = "bank_slip", ถ้าใบเสร็จร้านค้า = "receipt"
+- ถ้าไม่พบข้อมูลใด ให้ใส่ null`;
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image',
+              source: { type: 'base64', media_type: mimeType, data: base64 }
+            },
+            { type: 'text', text: prompt }
+          ]
+        }]
+      })
+    });
+
+    if(!response.ok) throw new Error('API error: ' + response.status);
+
+    const data = await response.json();
+    const raw  = data.content[0].text.trim();
+
+    // Parse JSON จาก response
+    let parsed;
+    try {
+      const jsonStr = raw.replace(/```json|```/g,'').trim();
+      parsed = JSON.parse(jsonStr);
+    } catch(e) {
+      throw new Error('อ่านข้อมูลไม่สำเร็จ กรุณาลองใหม่');
+    }
+
+    // บันทึกลง DB — เก็บแค่ text ไม่เก็บรูป
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const record = {
+      record_date : parsed.record_date || `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
+      record_time : parsed.record_time || `${pad(now.getHours())}:${pad(now.getMinutes())}:00`,
+      from_party  : parsed.from_party  || null,
+      to_party    : parsed.to_party    || null,
+      amount      : parseFloat(parsed.amount) || 0,
+      slip_type   : parsed.slip_type   || 'bank_slip',
+      income_type : 'expense',
+      raw_text    : `AI parsed — ${selectedFile ? selectedFile.name : ''}`
+    };
+
+    DB.insert(record);
+    renderRecords();
+    showAnalyzing(false);
+    resetBox();
+    showToast(`✅ บันทึกแล้ว — ${parseFloat(record.amount).toLocaleString('th-TH',{minimumFractionDigits:2})} ฿`);
+
+  } catch(err) {
+    showAnalyzing(false);
+    // ถ้า API ล้มเหลว บันทึกด้วยเวลาปัจจุบัน amount=0 แจ้งเตือน
+    const now = new Date();
+    const pad = n => String(n).padStart(2,'0');
+    const record = {
+      record_date : `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`,
+      record_time : `${pad(now.getHours())}:${pad(now.getMinutes())}:00`,
+      from_party  : null,
+      to_party    : null,
+      amount      : 0,
+      slip_type   : 'bank_slip',
+      income_type : 'expense',
+      raw_text    : 'API error — ' + err.message
+    };
+    DB.insert(record);
+    renderRecords();
+    resetBox();
+    showToast('⚠ อ่านข้อมูลไม่สำเร็จ บันทึกไว้แล้ว กรุณาตรวจสอบจำนวนเงิน');
+  }
+}
+
+function showAnalyzing(on){
+  let el = document.getElementById('analyzingOverlay');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'analyzingOverlay';
+    el.style.cssText = `
+      position:fixed;inset:0;background:rgba(0,0,0,.6);
+      z-index:500;display:flex;flex-direction:column;
+      align-items:center;justify-content:center;gap:14px;
+    `;
+    el.innerHTML = `
+      <div style="width:52px;height:52px;border:5px solid #333;border-top-color:#fff;
+                  border-radius:50%;animation:spin .8s linear infinite"></div>
+      <div style="color:#fff;font-size:15px;font-weight:600">กำลังอ่านข้อมูล...</div>
+      <div style="color:#aaa;font-size:12px">AI กำลังวิเคราะห์ slip / ใบเสร็จ</div>
+      <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+    `;
+    document.body.appendChild(el);
+  }
+  el.style.display = on ? 'flex' : 'none';
+}
+
+function resetBox(){
+  clearInterval(uploadTimer); uploadTimer = null;
+  selectedFile = null; previewDataURL = null;
+
+  document.getElementById('previewImg').src = '';
+  document.getElementById('previewImg').style.display = 'none';
+  document.getElementById('dzEmpty').style.display = 'flex';
+  document.getElementById('dropZone').classList.remove('has-image');
+  document.getElementById('uploadOverlay').style.display = 'none';
+
+  const btn = document.getElementById('btnUpload');
+  btn.disabled = true; btn.classList.remove('ready');
+  document.getElementById('inputGallery').value = '';
+  document.getElementById('inputCamera').value  = '';
+}
+
+/* ════════════════════════════════════════════════════
+   RENDER RECORD LIST + SUMMARY
+════════════════════════════════════════════════════ */
+function renderRecords(data){
+  const list = document.getElementById('recordList');
+  const rows = data || DB.getAll();
+
+  if(!rows.length){
+    list.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">🧾</div>
+        <div class="empty-text">ยังไม่มีรายการ<br>อัปโหลด Slip หรือใบเสร็จเพื่อเริ่มต้น</div>
+      </div>`;
+    document.getElementById('summaryBar').style.display = 'none';
+    return;
+  }
+
+  list.innerHTML = rows.map((r,i) => {
+    const d       = r.record_date ? fmtDate(r.record_date) : '—';
+    const t       = r.record_time ? r.record_time.slice(0,5) : '';
+    const amt     = fmtAmt(r.amount);
+    const barCls  = r.slip_type === 'bank_slip' ? 'bar-bank' : 'bar-receipt';
+    const typeTxt = r.slip_type === 'bank_slip' ? 'สลิปธนาคาร' : 'ใบเสร็จ';
+    const noteDisp = r.note ? `<div class="rec-note">📝 ${r.note}</div>` : '';
+
+    // Tag รายรับ / รายจ่าย
+    const iType   = r.income_type || 'expense';
+    const tagCls  = iType === 'income' ? 'tag-income' : 'tag-expense';
+    const tagIcon = iType === 'income'
+      ? `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg> รายรับ`
+      : `<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg> รายจ่าย`;
+    const amtCls  = iType === 'income' ? 'rec-amt amt-income' : 'rec-amt amt-expense';
+
+    return `
+      <div class="record-item" id="ri-${r.id}">
+        <div class="rec-bar ${barCls}"></div>
+        <div class="rec-num">${i+1}.</div>
+        <div class="rec-info">
+          <div class="rec-date-row">
+            <span class="rec-date">${d}${t ? ' — '+t : ''}</span>
+            <span class="rec-tag ${tagCls}" onclick="toggleIncomeType(${r.id})" title="กดเพื่อสลับ">${tagIcon}</span>
+          </div>
+          <div class="rec-type">${typeTxt}</div>
+          ${noteDisp}
+        </div>
+        <div class="${amtCls}">${iType==='income'?'+':'−'}${amt} ฿</div>
+        <div class="rec-actions">
+          <button class="btn-action btn-note" onclick="openNote(${r.id})" title="หมายเหตุ">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
+            </svg>
+          </button>
+          <button class="btn-action btn-view" onclick="viewDetail(${r.id})" title="ดูรายละเอียด">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <circle cx="11" cy="11" r="8"/>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+          </button>
+          <button class="btn-action btn-del" onclick="deleteRecord(${r.id})" title="ลบ">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"
+                 stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+              <polyline points="3 6 5 6 21 6"/>
+              <path d="M19 6l-1 14H6L5 6"/>
+              <path d="M10 11v6"/><path d="M14 11v6"/>
+              <path d="M9 6V4h6v2"/>
+            </svg>
+          </button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // อัพเดท summary
+  updateSummary(rows);
+}
+
+function updateSummary(rows){
+  const bar = document.getElementById('summaryBar');
+  if(!rows || !rows.length){ bar.style.display='none'; return; }
+
+  const total      = rows.reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const incomeAmt  = rows.filter(r => r.income_type==='income')
+                         .reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const expenseAmt = rows.filter(r => (r.income_type||'expense')==='expense')
+                         .reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const bankAmt    = rows.filter(r => r.slip_type==='bank_slip')
+                         .reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const recAmt     = rows.filter(r => r.slip_type==='receipt')
+                         .reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const balance    = incomeAmt - expenseAmt;
+
+  document.getElementById('sumCount').textContent    = `${rows.length} รายการ`;
+  document.getElementById('sumIncome').textContent   = '+' + fmtAmt(incomeAmt)  + ' ฿';
+  document.getElementById('sumExpense').textContent  = '−' + fmtAmt(expenseAmt) + ' ฿';
+  document.getElementById('sumBank').textContent     = fmtAmt(bankAmt)   + ' ฿';
+  document.getElementById('sumReceipt').textContent  = fmtAmt(recAmt)    + ' ฿';
+  document.getElementById('sumTotal').textContent    = fmtAmt(total)     + ' ฿';
+
+  const balEl = document.getElementById('sumBalance');
+  balEl.textContent = (balance >= 0 ? '+' : '−') + fmtAmt(Math.abs(balance)) + ' ฿';
+  balEl.style.color = balance >= 0 ? '#1a7a3c' : '#c00';
+
+  bar.style.display = 'block';
+}
+
+/* ════════════════════════════════════════════════════
+   DETAIL MODAL
+════════════════════════════════════════════════════ */
+function viewDetail(id){
+  const r = DB.getById(id);
+  if(!r) return;
+  const d   = r.record_date ? fmtDate(r.record_date) : '—';
+  const t   = r.record_time ? r.record_time.slice(0,5) : '—';
+  const amt = fmtAmt(r.amount);
+  const typ     = r.slip_type === 'bank_slip' ? '🏦 สลิปธนาคาร' : '🧾 ใบเสร็จ';
+  const iLabel  = (r.income_type||'expense') === 'income' ? '🟢 รายรับ' : '🔴 รายจ่าย';
+  const heroColor = (r.income_type||'expense') === 'income' ? '#1a7a3c' : '#c0392b';
+
+  document.getElementById('dtTitle').textContent = `${d} — ${t}`;
+  document.getElementById('dtBody').innerHTML = `
+    <div class="det-hero" style="color:${heroColor}">${(r.income_type||'expense')==='income'?'+':'−'}${amt} ฿</div>
+    <div class="det-sub">${d} — ${t} &nbsp;|&nbsp; ${typ} &nbsp;|&nbsp; ${iLabel}</div>
+    <div class="det-row">
+      <div class="det-label">โอนจาก / ผู้ขาย</div>
+      <div class="det-val">${r.from_party || '—'}</div>
+    </div>
+    <div class="det-row">
+      <div class="det-label">ไปยัง / ผู้รับ</div>
+      <div class="det-val">${r.to_party || '—'}</div>
+    </div>
+    ${r.note ? `
+    <div class="det-row">
+      <div class="det-label">หมายเหตุ</div>
+      <div class="det-val">📝 ${r.note}</div>
+    </div>` : ''}
+    <div class="det-row">
+      <div class="det-label">บันทึกเมื่อ</div>
+      <div class="det-val">${fmtDatetime(r.created_at)}</div>
+    </div>
+  `;
+  openModal('mdDetail');
+}
+
+/* ════════════════════════════════════════════════════
+   DELETE RECORD
+════════════════════════════════════════════════════ */
+function deleteRecord(id){
+  const r = DB.getById(id);
+  if(!r) return;
+  const d   = r.record_date ? fmtDate(r.record_date) : '—';
+  const amt = fmtAmt(r.amount);
+  if(!confirm(`ลบรายการนี้?\n${d} — ${amt} ฿`)) return;
+  DB.delete(id);
+  // animation ก่อนลบ
+  const el = document.getElementById('ri-'+id);
+  if(el){ el.style.transition='opacity .25s'; el.style.opacity='0';
+    setTimeout(()=>renderRecords(), 260); }
+  else renderRecords();
+  showToast('🗑 ลบรายการแล้ว');
+}
+
+/* ════════════════════════════════════════════════════
+   NOTE
+════════════════════════════════════════════════════ */
+let noteEditId = null;
+function openNote(id){
+  const r = DB.getById(id);
+  if(!r) return;
+  noteEditId = id;
+  const d   = r.record_date ? fmtDate(r.record_date) : '—';
+  const t   = r.record_time ? r.record_time.slice(0,5) : '';
+  const amt = fmtAmt(r.amount);
+  document.getElementById('noteRecordInfo').textContent =
+    `${d}${t?' — '+t:''} | ${amt} ฿`;
+  document.getElementById('noteText').value = r.note || '';
+  openModal('mdNote');
+  setTimeout(()=>document.getElementById('noteText').focus(), 300);
+}
+function saveNote(){
+  if(!noteEditId) return;
+  const records = DB.getAll();
+  const idx = records.findIndex(r => r.id == noteEditId);
+  if(idx < 0) return;
+  records[idx].note = document.getElementById('noteText').value.trim().slice(0,100);
+  DB.save(records);
+  closeModal('mdNote');
+  renderRecords();
+  showToast('✅ บันทึกหมายเหตุแล้ว');
+}
+
+/* ════════════════════════════════════════════════════
+   TOGGLE INCOME TYPE — กดที่ tag เพื่อสลับ รายรับ/รายจ่าย
+════════════════════════════════════════════════════ */
+function toggleIncomeType(id){
+  const records = DB.getAll();
+  const idx = records.findIndex(r => r.id == id);
+  if(idx < 0) return;
+  const cur = records[idx].income_type || 'expense';
+  records[idx].income_type = cur === 'expense' ? 'income' : 'expense';
+  DB.save(records);
+  renderRecords();
+  showToast(records[idx].income_type === 'income' ? '🟢 เปลี่ยนเป็น รายรับ' : '🔴 เปลี่ยนเป็น รายจ่าย');
+}
+
+const MONTHS = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน',
+                'กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
+const DDAYS  = ['อา','จ','อ','พ','พฤ','ศ','ส'];
+
+function buildCal(container, year, month, selected, onDayClick, navPrev, navNext){
+  const allRec    = DB.getAll();
+  const dotSet    = new Set(allRec.map(r => r.record_date));
+  const todayISO  = isoToday();
+  const firstDay  = new Date(year, month, 1).getDay();
+  const daysInMo  = new Date(year, month+1, 0).getDate();
+  const mm        = String(month+1).padStart(2,'0');
+
+  let html = `
+    <div class="cal-nav">
+      <button class="cal-nav-btn" onclick="${navPrev}()">◀</button>
+      <span class="cal-month">${MONTHS[month]} ${year+543}</span>
+      <button class="cal-nav-btn" onclick="${navNext}()">▶</button>
+    </div>
+    <div class="cal-grid">
+      ${DDAYS.map(d=>`<div class="cal-hd">${d}</div>`).join('')}
+      ${Array(firstDay).fill('<div class="cal-cell cal-empty"></div>').join('')}`;
+
+  for(let d=1; d<=daysInMo; d++){
+    const iso  = `${year}-${mm}-${String(d).padStart(2,'0')}`;
+    let cls = 'cal-cell';
+    if(iso === todayISO)  cls += ' today';
+    if(iso === selected)  cls += ' selected';
+    if(dotSet.has(iso))   cls += ' has-dot';
+    html += `<div class="${cls}" onclick="${onDayClick}('${iso}')">${d}</div>`;
+  }
+  html += '</div>';
+  document.getElementById(container).innerHTML = html;
+}
+
+/* ════════════════════════════════════════════════════
+   HISTORY
+════════════════════════════════════════════════════ */
+function openHistory(){
+  histCurDate  = new Date();
+  histSelected = null;
+  buildCal('histCal', histCurDate.getFullYear(), histCurDate.getMonth(),
+           null, 'histDayClick', 'histPrev', 'histNext');
+  document.getElementById('histResult').innerHTML =
+    '<div class="no-record">เลือกวันที่เพื่อดูประวัติ</div>';
+  openModal('mdHistory');
+}
+function histPrev(){
+  histCurDate = new Date(histCurDate.getFullYear(), histCurDate.getMonth()-1, 1);
+  buildCal('histCal', histCurDate.getFullYear(), histCurDate.getMonth(),
+           histSelected, 'histDayClick', 'histPrev', 'histNext');
+}
+function histNext(){
+  histCurDate = new Date(histCurDate.getFullYear(), histCurDate.getMonth()+1, 1);
+  buildCal('histCal', histCurDate.getFullYear(), histCurDate.getMonth(),
+           histSelected, 'histDayClick', 'histPrev', 'histNext');
+}
+function histDayClick(iso){
+  histSelected = iso;
+  buildCal('histCal', histCurDate.getFullYear(), histCurDate.getMonth(),
+           iso, 'histDayClick', 'histPrev', 'histNext');
+  const recs = DB.getByDate(iso);
+  const el = document.getElementById('histResult');
+  if(!recs.length){
+    el.innerHTML = `<div class="no-record">ไม่พบรายการวันที่ ${fmtDate(iso)}</div>`;
+    return;
+  }
+  el.innerHTML = `<div class="result-hd">วันที่ ${fmtDate(iso)} — ${recs.length} รายการ</div>` +
+    recs.map(r => resultItemHTML(r)).join('');
+}
+
+/* ════════════════════════════════════════════════════
+   EXPORT
+════════════════════════════════════════════════════ */
+function openExport(){
+  expCurDate  = new Date();
+  expSelected = null;
+  buildCal('expCal', expCurDate.getFullYear(), expCurDate.getMonth(),
+           null, 'expDayClick', 'expPrev', 'expNext');
+  document.getElementById('expResult').innerHTML =
+    '<div class="no-record">เลือกวันที่ที่ต้องการ Export</div>';
+  document.getElementById('expSummary').style.display = 'none';
+  document.getElementById('btnDoExport').classList.remove('show');
+  openModal('mdExport');
+}
+function expPrev(){
+  expCurDate = new Date(expCurDate.getFullYear(), expCurDate.getMonth()-1, 1);
+  buildCal('expCal', expCurDate.getFullYear(), expCurDate.getMonth(),
+           expSelected, 'expDayClick', 'expPrev', 'expNext');
+}
+function expNext(){
+  expCurDate = new Date(expCurDate.getFullYear(), expCurDate.getMonth()+1, 1);
+  buildCal('expCal', expCurDate.getFullYear(), expCurDate.getMonth(),
+           expSelected, 'expDayClick', 'expPrev', 'expNext');
+}
+function expDayClick(iso){
+  expSelected = iso;
+  buildCal('expCal', expCurDate.getFullYear(), expCurDate.getMonth(),
+           iso, 'expDayClick', 'expPrev', 'expNext');
+  const recs = DB.getByDate(iso);
+  const el   = document.getElementById('expResult');
+  const sum  = document.getElementById('expSummary');
+  const btn  = document.getElementById('btnDoExport');
+
+  if(!recs.length){
+    el.innerHTML = `<div class="no-record">ไม่พบรายการวันที่ ${fmtDate(iso)}</div>`;
+    sum.style.display = 'none';
+    btn.classList.remove('show');
+    return;
+  }
+  const total = recs.reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  el.innerHTML = `<div class="result-hd">วันที่ ${fmtDate(iso)} — ${recs.length} รายการ</div>` +
+    recs.map(r => resultItemHTML(r)).join('');
+  document.getElementById('expSumLabel').textContent = `${recs.length} รายการที่เลือก`;
+  document.getElementById('expSumTotal').textContent = fmtAmt(total) + ' ฿';
+  sum.style.display = 'flex';
+  btn.classList.add('show');
+}
+
+/* ════════════════════════════════════════════════════
+   DO EXPORT → xlsx
+════════════════════════════════════════════════════ */
+function doExport(){
+  if(!expSelected) return;
+  const recs = DB.getByDate(expSelected);
+  if(!recs.length) return;
+
+  const total = recs.reduce((s,r) => s + parseFloat(r.amount||0), 0);
+  const today = fmtDate(isoToday());
+
+  const wsData = [
+    ['My Expense Data — Export Report'],
+    [`วันที่ Export: ${today}   |   ข้อมูลวันที่: ${fmtDate(expSelected)}`],
+    [],
+    ['#', 'วันที่ (Date)', 'เวลา (Time)', 'จาก (From)', 'ไปยัง (To)', 'ประเภท (Type)', 'รายรับ/รายจ่าย', 'จำนวนเงิน (Amount ฿)', 'หมายเหตุ'],
+    ...recs.map((r,i) => [
+      i + 1,
+      r.record_date ? fmtDate(r.record_date) : '—',
+      r.record_time ? r.record_time.slice(0,5) : '—',
+      r.from_party  || '—',
+      r.to_party    || '—',
+      r.slip_type === 'bank_slip' ? 'สลิปธนาคาร' : 'ใบเสร็จ',
+      parseFloat(r.amount || 0),
+      r.note || ''
+    ]),
+    [],
+    ['', '', '', '', '', 'รวมทั้งหมด (Total)', total, '']
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  ws['!cols'] = [
+    {wch:4},{wch:13},{wch:10},
+    {wch:26},{wch:22},{wch:13},{wch:12},{wch:16},{wch:18}
+  ];
+  ws['!merges'] = [
+    {s:{r:0,c:0}, e:{r:0,c:8}},
+    {s:{r:1,c:0}, e:{r:1,c:8}}
+  ];
+
+  XLSX.utils.book_append_sheet(wb, ws, 'Expense Records');
+  XLSX.writeFile(wb, 'Export.xlsx');
+
+  DB.logExport(expSelected, expSelected, recs);
+  closeModal('mdExport');
+
+  // Brief toast feedback
+  showToast('✅ Export สำเร็จ — ตรวจสอบในโฟลเดอร์ Downloads');
+}
+
+/* ════════════════════════════════════════════════════
+   HELPERS
+════════════════════════════════════════════════════ */
+function resultItemHTML(r){
+  const d   = r.record_date ? fmtDate(r.record_date) : '—';
+  const t   = r.record_time ? r.record_time.slice(0,5) : '—';
+  const amt = fmtAmt(r.amount);
+  const bar = r.slip_type === 'bank_slip' ? 'bar-bank' : 'bar-receipt';
+  return `
+    <div class="result-item">
+      <div class="res-bar ${bar}"></div>
+      <div class="res-main">
+        <div class="res-datetime">${d} — ${t} &nbsp;|&nbsp; ${amt} ฿</div>
+        <div class="res-from">${r.from_party||'—'} → ${r.to_party||'—'}</div>
+      </div>
+    </div>`;
+}
+
+function fmtDate(iso){
+  if(!iso) return '—';
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+function fmtAmt(v){
+  return parseFloat(v||0).toLocaleString('th-TH',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+function fmtDatetime(iso){
+  if(!iso) return '—';
+  const dt = new Date(iso);
+  const pad = n => String(n).padStart(2,'0');
+  return `${pad(dt.getDate())}/${pad(dt.getMonth()+1)}/${dt.getFullYear()} ${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+}
+function isoToday(){
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+}
+
+/* ── Toast ── */
+function showToast(msg){
+  let t = document.getElementById('toast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'toast';
+    Object.assign(t.style, {
+      position:'fixed',bottom:'80px',left:'50%',transform:'translateX(-50%)',
+      background:'#111',color:'#fff',padding:'10px 20px',borderRadius:'24px',
+      fontSize:'13px',zIndex:'999',whiteSpace:'nowrap',transition:'opacity .3s',
+      boxShadow:'0 4px 16px rgba(0,0,0,.25)'
+    });
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  setTimeout(() => { t.style.opacity='0'; }, 2800);
+}
+
+/* ════════════════════════════════════════════════════
+   MODAL OPEN / CLOSE
+════════════════════════════════════════════════════ */
+function openModal(id){
+  const el = document.getElementById(id);
+  el.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+// Close on backdrop click
+document.querySelectorAll('.modal-bg').forEach(bg => {
+  bg.addEventListener('click', e => {
+    if(e.target === bg) closeModal(bg.id);
+  });
+});
+
+/* ════════════════════════════════════════════════════
+   DRAG & DROP
+════════════════════════════════════════════════════ */
+const dz = document.getElementById('dropZone');
+dz.addEventListener('dragover', e => {
+  e.preventDefault(); dz.classList.add('drag-over');
+});
+dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if(file && file.type.startsWith('image/')){
+    const dt = new DataTransfer();
+    dt.items.add(file);
+    const inp = document.getElementById('inputGallery');
+    inp.files = dt.files;
+    onFileSelected(inp);
+  }
+});
+
+/* ════════════════════════════════════════════════════
+   INIT
+════════════════════════════════════════════════════ */
+renderRecords();
+
+</script>
+</body>
+</html>
