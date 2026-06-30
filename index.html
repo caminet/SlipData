@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<meta name="theme-color" content="#ffffff" />
+<title>My Expense Data</title>
+
+<!-- OCR engine (reads amount from slip / receipt automatically) -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+<!-- XLSX engine (exports Export.xlsx with the shared columns) -->
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<!-- Shared data layer + columns (matches db.sql & export.xlsx) -->
+<script src="db.js"></script>
+
+<style>
+/* ===================== THEME : White & Black ===================== */
+:root{
+  --bg:#ffffff;
+  --ink:#000000;
+  --ink-soft:#3a3a3a;
+  --muted:#8a8a8a;
+  --line:#000000;
+  --line-soft:#dcdcdc;
+  --box:#ffffff;
+  --income:#000000;     /* income uses solid black */
+  --expense:#000000;    /* expense uses outlined black */
+  --shadow:0 1px 3px rgba(0,0,0,.12), 0 1px 2px rgba(0,0,0,.08);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0;background:#f4f4f4;color:var(--ink);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Sarabun","Noto Sans Thai",Roboto,Helvetica,Arial,sans-serif;
+  font-size:15px;line-height:1.45}
+button{font-family:inherit;cursor:pointer}
+
+/* ---------- app shell (mobile first, centered on desktop) ---------- */
+.app{max-width:480px;margin:0 auto;background:var(--bg);min-height:100vh;
+  display:flex;flex-direction:column;box-shadow:0 0 24px rgba(0,0,0,.06)}
+
+/* ---------- Banner ---------- */
+.banner{background:var(--ink);color:#fff;text-align:center;
+  padding:16px 12px;font-size:19px;font-weight:700;letter-spacing:.3px;position:sticky;top:0;z-index:30}
+
+/* ---------- content ---------- */
+.content{padding:14px 14px 22px;flex:1}
+
+/* ---------- Box (1 & 2) ---------- */
+.box{background:var(--box);border:1.5px solid var(--line);border-radius:14px;
+  padding:14px;margin-bottom:16px;box-shadow:var(--shadow)}
+.box-title{font-size:13px;font-weight:700;margin:0 0 10px;letter-spacing:.2px}
+
+/* ---------- Upload area ---------- */
+.upload-zone{border:1.5px dashed var(--line);border-radius:12px;background:#fafafa;
+  padding:18px 12px;text-align:center;position:relative}
+.upload-zone .ph{color:var(--muted);font-size:13px;margin:0}
+.upload-zone .pick{margin-top:10px;display:inline-flex;align-items:center;gap:8px;
+  background:var(--ink);color:#fff;border:none;border-radius:999px;padding:9px 16px;font-size:13px;font-weight:600}
+.upload-zone .pick:active{transform:scale(.97)}
+.cam-btn{position:absolute;top:8px;right:8px;background:#fff;border:1.5px solid var(--line);
+  border-radius:10px;width:38px;height:38px;display:flex;align-items:center;justify-content:center}
+.cam-btn:active{transform:scale(.95)}
+
+/* image preview inside box 1 */
+.preview-wrap{position:relative;margin-top:12px;border:1px solid var(--line-soft);border-radius:10px;overflow:hidden;background:#000}
+.preview-wrap img{display:block;width:100%;height:auto;max-height:340px;object-fit:contain}
+.preview-wrap .clear{position:absolute;top:6px;right:6px;background:rgba(0,0,0,.65);color:#fff;border:none;
+  border-radius:8px;width:30px;height:30px;font-size:15px;display:flex;align-items:center;justify-content:center}
+
+/* upload (extract) button */
+.act{margin-top:12px;width:100%;background:var(--ink);color:#fff;border:none;border-radius:10px;
+  padding:12px;font-size:14px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:8px}
+.act:disabled{opacity:.5}
+.act:active{transform:scale(.99)}
+
+/* ===================== Circular progress (Image 2) ===================== */
+.progress-overlay{position:fixed;inset:0;background:rgba(255,255,255,.92);
+  display:none;align-items:center;justify-content:center;z-index:80}
+.progress-overlay.show{display:flex}
+.progress-card{background:#fff;border:1.5px solid var(--line);border-radius:16px;padding:24px 28px;text-align:center;box-shadow:var(--shadow)}
+.ring-wrap{position:relative;width:120px;height:120px;margin:0 auto 14px}
+.ring-wrap svg{transform:rotate(-90deg)}
+.ring-bg{stroke:#ececec}
+.ring-fg{stroke:var(--ink);transition:stroke-dashoffset .25s ease}
+.ring-pct{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-size:22px;font-weight:800}
+.progress-card .ptitle{font-size:14px;font-weight:700;margin:0 0 4px}
+.progress-card .psub{font-size:12px;color:var(--muted);margin:0}
+
+/* ===================== Box 2 : extracted data rows ===================== */
+.data-list{display:flex;flex-direction:column;gap:8px}
+.row{display:flex;align-items:center;gap:8px;border:1px solid var(--line-soft);
+  border-radius:10px;padding:9px 10px;background:#fff}
+.row .row-main{flex:1;min-width:0}
+.row .row-no{font-weight:800;font-size:13px}
+.row .row-date{font-size:13px;color:var(--ink)}
+.row .row-amt{font-weight:800;font-size:14px;margin-left:6px}
+.row .row-tag{font-size:10px;font-weight:700;padding:1px 7px;border-radius:999px;margin-left:6px;white-space:nowrap}
+.tag-income{background:var(--ink);color:#fff}
+.tag-expense{background:#fff;color:var(--ink);border:1px solid var(--ink)}
+.row .row-warn{font-size:10px;color:#b00;margin-left:6px}
+.row-icons{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.icon-btn{width:32px;height:32px;border:1px solid var(--line-soft);border-radius:8px;background:#fff;
+  display:flex;align-items:center;justify-content:center}
+.icon-btn:active{transform:scale(.92);background:#f2f2f2}
+.icon-btn.on{background:var(--ink);border-color:var(--ink)}
+.icon-btn.on svg{stroke:#fff}
+.empty{color:var(--muted);font-size:13px;text-align:center;padding:18px 6px}
+
+/* note editor inline */
+.note-edit{margin-top:8px;display:flex;gap:6px}
+.note-edit input{flex:1;border:1px solid var(--line-soft);border-radius:8px;padding:8px;font-size:13px}
+.note-edit button{border:none;background:var(--ink);color:#fff;border-radius:8px;padding:0 14px;font-size:13px}
+.note-line{font-size:11px;color:var(--muted);margin-top:4px;font-style:italic}
+
+/* ---------- summary total (bottom of box 2) ---------- */
+.summary{margin-top:14px;border-top:1.5px solid var(--line);padding-top:12px}
+.summary h4{margin:0 0 8px;font-size:13px}
+.sum-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.sum-cell{border:1px solid var(--line-soft);border-radius:10px;padding:8px;text-align:center}
+.sum-cell .lab{font-size:11px;color:var(--muted)}
+.sum-cell .val{font-size:14px;font-weight:800;margin-top:2px}
+.sum-cell.net{background:var(--ink);color:#fff;border-color:var(--ink)}
+.sum-cell.net .lab{color:#cfcfcf}
+
+/* ===================== bottom action bar ===================== */
+.actions{display:flex;gap:10px;margin-top:6px}
+.actions button{flex:1;background:#fff;border:1.5px solid var(--ink);border-radius:10px;padding:11px;
+  font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}
+.actions button:active{transform:scale(.99);background:#f2f2f2}
+
+/* ===================== Modal (History / Export) ===================== */
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:flex-end;justify-content:center;z-index:90}
+.modal.show{display:flex}
+.sheet{background:#fff;width:100%;max-width:480px;border-radius:16px 16px 0 0;padding:14px 14px 22px;
+  max-height:92vh;overflow:auto;animation:slideUp .22s ease}
+@keyframes slideUp{from{transform:translateY(40px);opacity:.6}to{transform:translateY(0);opacity:1}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sheet-head h3{margin:0;font-size:16px}
+.x-btn{background:#fff;border:1.5px solid var(--ink);border-radius:999px;width:34px;height:34px;
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700}
+
+/* calendar */
+.cal{border:1px solid var(--line-soft);border-radius:12px;padding:10px}
+.cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.cal-nav button{background:#fff;border:1px solid var(--line);border-radius:8px;width:32px;height:32px;font-size:15px}
+.cal-nav .month{font-weight:700;font-size:14px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+.cal-grid .dow{font-size:10px;color:var(--muted);text-align:center;padding:4px 0}
+.cal-cell{aspect-ratio:1/1;border:1px solid transparent;border-radius:8px;display:flex;align-items:center;justify-content:center;
+  font-size:12px;background:#fafafa}
+.cal-cell.empty{background:transparent}
+.cal-cell.sel{background:var(--ink);color:#fff;font-weight:700}
+.cal-cell.inrange{background:#e9e9e9}
+.cal-cell.has{font-weight:800;text-decoration:underline}
+.cal-hint{font-size:11px;color:var(--muted);margin:8px 2px 0}
+
+/* records preview inside modal */
+.rec-list{margin-top:12px;display:flex;flex-direction:column;gap:6px;max-height:38vh;overflow:auto}
+.rec{border:1px solid var(--line-soft);border-radius:10px;padding:8px 10px;font-size:12px}
+.rec .r1{font-weight:700}
+.rec .r2{color:var(--muted);margin-top:2px}
+
+/* toast */
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  padding:10px 16px;border-radius:999px;font-size:13px;z-index:120;opacity:0;pointer-events:none;transition:opacity .2s}
+.toast.show{opacity:1}
+
+/* detail (magnify) popup */
+.detail-pop{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:95;padding:18px}
+.detail-pop.show{display:flex}
+.detail-card{background:#fff;border:1.5px solid var(--ink);border-radius:14px;padding:16px;max-width:380px;width:100%}
+.detail-card .d1{font-weight:800;font-size:15px}
+.detail-card .d2{color:var(--ink-soft);font-size:13px;margin-top:8px;white-space:pre-wrap}
+.detail-card .close{margin-top:14px;width:100%;background:var(--ink);color:#fff;border:none;border-radius:10px;padding:11px;font-weight:700}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ===== Banner ===== -->
+  <div class="banner">My Expense Data</div>
+
+  <div class="content">
+
+    <!-- ===== Box 1 : upload / camera / preview ===== -->
+    <div class="box">
+      <p class="box-title">อัปโหลดสลิป / ใบเสร็จ</p>
+      <div class="upload-zone" id="uploadZone">
+        <p class="ph">เลือกไฟล์ภาพสลิป หรือถ่ายรูปใบเสร็จ</p>
+        <button class="pick" id="pickBtn">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          Select a file to upload
+        </button>
+        <button class="cam-btn" id="camBtn" title="ถ่ายรูปใบเสร็จ">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+        </button>
+      </div>
+
+      <!-- file inputs (hidden) -->
+      <input type="file" id="fileInput" accept="image/*" hidden />
+      <input type="file" id="camInput" accept="image/*" capture="environment" hidden />
+
+      <!-- preview -->
+      <div class="preview-wrap" id="previewWrap" style="display:none">
+        <img id="previewImg" alt="slip preview" />
+        <button class="clear" id="clearPreview" title="ลบภาพ">&times;</button>
+      </div>
+
+      <button class="act" id="uploadBtn" disabled>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Upload
+      </button>
+    </div>
+
+    <!-- ===== Box 2 : extracted data ===== -->
+    <div class="box">
+      <p class="box-title">ข้อมูลที่เก็บจากสลิป / ใบเสร็จ</p>
+      <div class="data-list" id="dataList">
+        <div class="empty" id="emptyState">ยังไม่มีข้อมูล — อัปโหลดสลิปหรือใบเสร็จเพื่อเริ่ม</div>
+      </div>
+
+      <!-- summary total -->
+      <div class="summary" id="summary" style="display:none">
+        <h4>ยอดสรุป</h4>
+        <div class="sum-grid">
+          <div class="sum-cell"><div class="lab">รายรับ</div><div class="val" id="sumIn">฿0.00</div></div>
+          <div class="sum-cell"><div class="lab">รายจ่าย</div><div class="val" id="sumOut">฿0.00</div></div>
+          <div class="sum-cell net"><div class="lab">คงเหลือสุทธิ</div><div class="val" id="sumNet">฿0.00</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== actions ===== -->
+    <div class="actions">
+      <button id="historyBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        History
+      </button>
+      <button id="exportBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Circular progress overlay (Image 2) ===== -->
+<div class="progress-overlay" id="progOverlay">
+  <div class="progress-card">
+    <div class="ring-wrap">
+      <svg width="120" height="120">
+        <circle class="ring-bg" cx="60" cy="60" r="52" fill="none" stroke-width="10"/>
+        <circle class="ring-fg" id="ringFg" cx="60" cy="60" r="52" fill="none" stroke-width="10"
+                stroke-linecap="round" stroke-dasharray="326.7" stroke-dashoffset="326.7"/>
+      </svg>
+      <div class="ring-pct" id="ringPct">0%</div>
+    </div>
+    <p class="ptitle" id="progTitle">กำลังอัปโหลด…</p>
+    <p class="psub" id="progSub">กำลังอ่านข้อมูลจากสลิป / ใบเสร็จ</p>
+  </div>
+</div>
+
+<!-- ===== Modal : History ===== -->
+<div class="modal" id="historyModal">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h3>History — เลือกวันที่ดูประวัติ</h3>
+      <button class="x-btn" data-close>×</button>
+    </div>
+    <div class="cal" id="histCal"></div>
+    <p class="cal-hint">คลิกวันที่จุดเริ่มต้น แล้วคลิกวันที่สิ้นสุด (เลือกช่วง) — วันที่มีข้อมูลจะขีดเส้นใต้</p>
+    <div class="rec-list" id="histRecs"></div>
+  </div>
+</div>
+
+<!-- ===== Modal : Export ===== -->
+<div class="modal" id="exportModal">
+  <div class="sheet">
+    <div class="sheet-head">
+      <h3>Export — เลือกช่วงวันที่</h3>
+      <button class="x-btn" data-close>×</button>
+    </div>
+    <div class="cal" id="expCal"></div>
+    <p class="cal-hint">เลือกวันเริ่มต้นและวันสิ้นสุด แล้วกด Export</p>
+    <div class="rec-list" id="expRecs"></div>
+    <button class="act" id="doExportBtn" style="margin-top:12px" disabled>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      Export
+    </button>
+  </div>
+</div>
+
+<!-- ===== Detail (magnify) view-only popup ===== -->
+<div class="detail-pop" id="detailPop">
+  <div class="detail-card">
+    <div class="d1" id="detailHead"></div>
+    <div class="d2" id="detailBody"></div>
+    <button class="close" id="detailClose">ปิด</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================================
+ *  My Expense Data  —  application logic
+ *  - OCR amount is read automatically via Tesseract.js (no manual entry)
+ *  - Columns match db.js / db.sql / export.xlsx
+ * ========================================================================= */
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+const fmtMoney = n => "฿" + (Number(n)||0).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fmtDate  = d => d || "--/--/----";
+
+/* ---------- current selected image (data URL) ---------- */
+let currentImage = null;
+
+/* ---------- file pickers ---------- */
+$('#pickBtn').onclick = () => $('#fileInput').click();
+$('#camBtn').onclick  = () => $('#camInput').click();
+
+function handleFile(file){
+  if(!file || !file.type.startsWith("image/")){ toast("กรุณาเลือกไฟล์ภาพ"); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    currentImage = e.target.result;
+    $('#previewImg').src = currentImage;
+    $('#previewWrap').style.display = "block";
+    $('#uploadBtn').disabled = false;
+  };
+  reader.readAsDataURL(file);
+}
+$('#fileInput').onchange = e => handleFile(e.target.files[0]);
+$('#camInput').onchange  = e => handleFile(e.target.files[0]);
+$('#clearPreview').onclick = () => resetUpload();
+
+function resetUpload(){
+  currentImage = null;
+  $('#previewWrap').style.display = "none";
+  $('#previewImg').src = "";
+  $('#fileInput').value = ""; $('#camInput').value = "";
+  $('#uploadBtn').disabled = true;
+}
+
+/* ===================== circular progress ===================== */
+const R = 52, CIRC = 2*Math.PI*R;
+$('#ringFg').setAttribute('stroke-dasharray', CIRC);
+function setProgress(pct, title, sub){
+  pct = Math.max(0, Math.min(100, pct));
+  $('#ringFg').style.strokeDashoffset = CIRC * (1 - pct/100);
+  $('#ringPct').textContent = Math.round(pct) + "%";
+  if(title) $('#progTitle').textContent = title;
+  if(sub)    $('#progSub').textContent = sub;
+}
+function showProg(title, sub){ setProgress(0,title,sub); $('#progOverlay').classList.add('show'); }
+function hideProg(){ $('#progOverlay').classList.remove('show'); }
+
+/* ===================== Upload → OCR ===================== */
+$('#uploadBtn').onclick = async () => {
+  if(!currentImage) return;
+  showProg("กำลังอัปโหลด…", "กำลังอ่านข้อมูลจากสลิป / ใบเสร็จ");
+  let extracted = null, warn = "";
+  try{
+    extracted = await runOCR(currentImage, p => setProgress(p, "กำลังอัปโหลด…", "อ่านข้อมูลด้วย OCR"));
+    setProgress(100, "เสร็จสิ้น", "บันทึกข้อมูลแล้ว");
+  }catch(err){
+    console.error(err);
+    warn = "ไม่สามารถอ่านข้อมูลได้";
+    extracted = emptyRecord();
+  }
+  await wait(450);
+  hideProg();
+
+  if(extracted.amount === 0){
+    warn = warn || "ไม่พบจำนวนเงินในภาพ กรุณาลองภาพใหม่";
+  }
+
+  DB.insert({
+    date: extracted.date, time: extracted.time,
+    from_acc: extracted.from_acc, to_acc: extracted.to_acc,
+    amount: extracted.amount, type: "expense",
+    note: "", created_at: new Date().toISOString()
+  });
+  resetUpload();
+  render();
+  toast(warn ? ("บันทึกแล้ว — " + warn) : "บันทึกข้อมูลเรียบร้อย");
+};
+
+function emptyRecord(){ return {date:"",time:"",from_acc:"",to_acc:"",amount:0}; }
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ===================== OCR (Tesseract.js) =====================
+ * Reads amount / date / time / from / to automatically from the image. */
+async function runOCR(dataURL, onProgress){
+  if(typeof Tesseract === "undefined")
+    throw new Error("Tesseract not loaded");
+
+  const { data:{ text } } = await Tesseract.recognize(dataURL, "tha+eng", {
+    logger: m => {
+      if(m.status === "recognizing text" && onProgress) onProgress(m.progress*100);
+      else if(onProgress && typeof m.progress === "number") onProgress(m.progress*60);
+    }
+  });
+  return parseSlip(text);
+}
+
+/* ===================== Slip / receipt parser =====================
+ * Extracts the reference points: Date, Time, From, To, Amount.
+ * The amount is parsed strictly so it is captured correctly. */
+function parseSlip(rawText){
+  const text = (rawText||"").replace(/\u00a0/g," ");
+  const lines = text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  const joined = lines.join(" ");
+
+  return {
+    date:     findDate(joined),
+    time:     findTime(joined),
+    from_acc: findFrom(lines),
+    to_acc:   findTo(lines),
+    amount:   findAmount(joined, lines)
+  };
+}
+
+/* ---------- Amount ---------- */
+function findAmount(joined, lines){
+  const moneyTokens = []; // {val, score}
+
+  // 1) keyword-anchored amounts (highest score)
+  const kw = /(จำนวนเงิน|ยอดเงิน|ยอดรวม|รวมเงิน|รวมทั้งสิ้น|ยอดโอน|โอนเงิน|จำนวนชำระ|Grand\s*Total|Total\s*Amount|Total|Amount|THB|฿)/i;
+  const numRe = /(\d{1,3}(?:,\d{3})+|\d{4,})\.\d{2}/g;   // x,xxx.xx  or xxxx.xx
+  // also allow plain 1,234.56 anywhere
+  const allNum = /฿?\s*THB?\s*:??\s*([\d]{1,3}(?:,\d{3})+(?:\.\d{2})?|[\d]+\.\d{2})/gi;
+
+  // gather all decimal-2 currency numbers with positions/keyword context
+  let m;
+  const re = /(?:฿|THB|จำนวนเงิน|ยอดเงิน|ยอดรวม|รวมเงิน|รวมทั้งสิ้น|ยอดโอน|Total|Amount|Grand\s*Total)?\s*([\d]{1,3}(?:,\d{3})+(?:\.\d{2})?|[\d]+\.\d{2})/gi;
+  const lower = joined.toLowerCase();
+  while((m = re.exec(joined))){
+    const raw = m[1];
+    const val = parseFloat(raw.replace(/,/g,""));
+    if(isNaN(val)) continue;
+    // score: keyword present nearby = +5 ; large value = + ; two decimals preferred
+    const around = lower.substring(Math.max(0,m.index-18), m.index).toLowerCase();
+    let score = 0;
+    if(/(จำนวนเงิน|ยอดเงิน|ยอดรวม|รวมเงิน|รวมทั้งสิ้น|ยอดโอน|จำนวนชำระ|grand\s*total|total\s*amount|total|amount|thb|฿)/.test(around)) score += 6;
+    if(/\.\d{2}$/.test(raw)) score += 2;
+    score += Math.min(4, Math.log10(val+1)); // mild preference for bigger (transaction) amounts
+    moneyTokens.push({val, score});
+  }
+
+  // also scan per-line: a line containing a keyword and a number
+  lines.forEach(line=>{
+    const l = line.toLowerCase();
+    if(/(จำนวนเงิน|ยอดเงิน|ยอดรวม|รวมเงิน|รวมทั้งสิ้น|ยอดโอน|จำนวนชำระ|grand\s*total|total\s*amount|total|amount)/.test(l)){
+      const mm = line.match(/([\d]{1,3}(?:,\d{3})+(?:\.\d{2})?|[\d]+\.\d{2})/);
+      if(mm){
+        const val = parseFloat(mm[1].replace(/,/g,""));
+        if(!isNaN(val)) moneyTokens.push({val, score:10});
+      }
+    }
+  });
+
+  if(!moneyTokens.length) return 0;
+  moneyTokens.sort((a,b)=> b.score - a.score || b.val - a.val);
+  return Math.round(moneyTokens[0].val*100)/100;
+}
+
+/* ---------- Date ---------- */
+const TH_MONTHS = {"ม.ค.":"01","ก.พ.":"02","มี.ค.":"03","เม.ย.":"04","พ.ค.":"05","มิ.ย.":"06",
+  "ก.ค.":"07","ส.ค.":"08","ก.ย.":"09","ต.ค.":"10","พ.ย.":"11","ธ.ค.":"12",
+  "มกราคม":"01","กุมภาพันธ์":"02","มีนาคม":"03","เมษายน":"04","พฤษภาคม":"05","มิถุนายน":"06",
+  "กรกฎาคม":"07","สิงหาคม":"08","กันยายน":"09","ตุลาคม":"10","พฤศจิกายน":"11","ธันวาคม":"12"};
+function findDate(joined){
+  // numeric dd/mm/yyyy or dd-mm-yyyy
+  let m = joined.match(/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/);
+  if(m){
+    let [ ,dd,mm,yy] = m; dd=pad(dd); mm=pad(mm);
+    // numeric dd/mm/yy : 2-digit year is a SHORT CHRISTIAN year (25 -> 2025)
+    let y = parseInt(yy,10);
+    if(y < 100) y += 2000;
+    if(y > 2443) y -= 543;                     // full buddhist year (2569) -> christian
+    return `${dd}/${mm}/${pad(y)}`;
+  }
+  // Thai month name : 29 มิ.ย. 68  or  29 มิถุนายน 2569
+  const re = /\b(\d{1,2})\s+([ก-๏\.]+?)\s+(\d{2,4})\b/;
+  m = joined.match(re);
+  if(m){
+    // try both "มิ.ย." and "มิ.ย" forms since OCR may keep or drop trailing dot
+    const mm = TH_MONTHS[m[2]] || TH_MONTHS[m[2].replace(/\.$/,"")];
+    if(mm){
+      // with a Thai month name the year is BUDDHIST (short 68 = 2568, full 2569)
+      const y = normalizeYear(parseInt(m[3],10));
+      return `${pad(m[1])}/${mm}/${pad(y)}`;
+    }
+  }
+  return "";
+}
+const pad = n => String(n).padStart(2,"0");
+/* Convert a Thai slip year to a 4-digit christian year.
+ * - 2-digit number on a Thai slip = short Buddhist year (e.g. 68 -> 2568 -> 2025)
+ * - 4-digit > 2443 (e.g. 2569) = full Buddhist year -> subtract 543
+ * - 4-digit christian year is returned unchanged                              */
+const normalizeYear = y => {
+  if(y < 100) return (y + 2500) - 543;       // short buddhist -> christian
+  if(y > 2443) return y - 543;               // full buddhist -> christian
+  return y;                                  // already christian
+};
+
+/* ---------- Time ---------- */
+function findTime(joined){
+  const m = joined.match(/\b(\d{1,2}):(\d{2})(?::(\d{2}))?\b/);
+  if(m) return `${pad(m[1])}:${m[2]}${m[3]?":"+m[3]:":00"}`;
+  return "";
+}
+
+/* ---------- From / To ---------- */
+function findFrom(lines){
+  return matchKey(lines, /(จาก|โอนจาก|ผู้โอน|ผู้ชำระ|จ่ายโดย|From|Sender|Paid by)/i);
+}
+function findTo(lines){
+  return matchKey(lines, /(ไปยัง|รับจาก|ผู้รับ|ผู้รับเงิน|เข้า|ถึง|To|Receiver|Recipient|Payee)/i);
+}
+function matchKey(lines, re){
+  for(const l of lines){
+    const idx = l.search(re);
+    if(idx>-1){
+      const rest = l.slice(idx).replace(re,"").replace(/[:：\-\s]+/," ").trim();
+      if(rest && rest.length<60) return rest.replace(/\s{2,}/g," ");
+    }
+  }
+  return "";
+}
+
+/* ===================== Render Box 2 ===================== */
+function render(){
+  const rows = DB.getAll();
+  const list = $('#dataList');
+  list.innerHTML = "";
+
+  if(!rows.length){
+    list.innerHTML = `<div class="empty">ยังไม่มีข้อมูล — อัปโหลดสลิปหรือใบเสร็จเพื่อเริ่ม</div>`;
+    $('#summary').style.display = "none";
+    return;
+  }
+
+  rows.forEach(r=>{
+    const el = document.createElement("div");
+    el.className = "row";
+    el.dataset.id = r.id;
+    const incomeOn = r.type === "income";
+    el.innerHTML = `
+      <div class="row-main">
+        <span class="row-no">${r.id}.</span>
+        <span class="row-date">${fmtDate(r.date)} - ${r.time||"--:--:--"}</span>
+        <span class="row-amt">${fmtMoney(r.amount)}</span>
+        <span class="row-tag ${incomeOn?'tag-income':'tag-expense'}">${incomeOn?'รายรับ':'รายจ่าย'}</span>
+        ${r.amount===0?'<span class="row-warn">ยังไม่พบยอด</span>':''}
+        <div class="note-line" ${r.note?'':'style="display:none"'}>📝 ${escapeHtml(r.note)}</div>
+      </div>
+      <div class="row-icons">
+        <button class="icon-btn" data-act="view" title="ดูรายละเอียด">
+          ${ic.search()}
+        </button>
+        <button class="icon-btn" data-act="note" title="หมายเหตุ">
+          ${ic.note()}
+        </button>
+        <button class="icon-btn ${incomeOn?'on':''}" data-act="tag" title="รายรับ/รายจ่าย">
+          ${ic.tag()}
+        </button>
+        <button class="icon-btn" data-act="del" title="ลบ">
+          ${ic.trash()}
+        </button>
+      </div>
+      <div class="note-edit" style="display:none">
+        <input type="text" placeholder="หมายเหตุสั้นๆ" value="${escapeHtml(r.note||'')}" />
+        <button data-note="save">บันทึก</button>
+      </div>`;
+    list.appendChild(el);
+  });
+
+  // summary
+  let inc=0, out=0;
+  rows.forEach(r=> r.type==="income" ? inc+=Number(r.amount) : out+=Number(r.amount));
+  $('#sumIn').textContent  = fmtMoney(inc);
+  $('#sumOut').textContent = fmtMoney(out);
+  $('#sumNet').textContent = fmtMoney(inc-out);
+  $('#summary').style.display = "block";
+}
+
+/* ---------- row interactions ---------- */
+$('#dataList').addEventListener("click", e => {
+  const row = e.target.closest(".row"); if(!row) return;
+  const id = Number(row.dataset.id);
+  const act = e.target.closest("[data-act],[data-note]");
+  if(!act) return;
+
+  if(act.dataset.act === "view"){ showDetail(id); }
+  else if(act.dataset.act === "note"){ toggleNote(row); }
+  else if(act.dataset.act === "tag"){ flipTag(id, row); }
+  else if(act.dataset.act === "del"){ if(confirm("ลบรายการนี้?")){ DB.remove(id); render(); } }
+
+  if(act.dataset.note === "save"){
+    const val = row.querySelector(".note-edit input").value.trim();
+    DB.update(id,{note:val}); render();
+  }
+});
+
+function toggleNote(row){
+  const ne = row.querySelector(".note-edit");
+  ne.style.display = ne.style.display==="none"?"flex":"none";
+  if(ne.style.display==="flex") ne.querySelector("input").focus();
+}
+function flipTag(id, row){
+  const r = DB.getAll().find(x=>x.id===id);
+  DB.update(id,{type: r.type==="income"?"expense":"income"});
+  render();
+}
+
+/* ---------- detail (magnify) — view only ---------- */
+function showDetail(id){
+  const r = DB.getAll().find(x=>x.id===id);
+  if(!r) return;
+  $('#detailHead').textContent = `${fmtDate(r.date)} - ${r.time||"--:--:--"} - ${fmtMoney(r.amount)} (${r.type==="income"?"รายรับ":"รายจ่าย"})`;
+  let body = "";
+  if(r.from_acc || r.to_acc){
+    body += `โอนจาก ${r.from_acc||"-"} ไป ${r.to_acc||"-"}\n`;
+  }else{
+    body += `โอนจาก - ไป -\n`;
+  }
+  if(r.note) body += `\nหมายเหตุ: ${r.note}`;
+  $('#detailBody').textContent = body;
+  $('#detailPop').classList.add("show");
+}
+$('#detailClose').onclick = () => $('#detailPop').classList.remove("show");
+$('#detailPop').onclick = e => { if(e.target.id==="detailPop") $('#detailPop').classList.remove("show"); };
+
+/* ===================== Icons (inline SVG) ===================== */
+const ic = {
+  search:()=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>`,
+  note:()=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>`,
+  tag:()=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41 13.42 20.6a2 2 0 0 1-2.83 0L3 13V3h10l7.59 7.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>`,
+  trash:()=>`<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`
+};
+
+/* ===================== Toast ===================== */
+let toastT;
+function toast(msg){
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(toastT); toastT = setTimeout(()=>t.classList.remove("show"),2200);
+}
+
+/* ===================== Calendar component ===================== */
+function buildCalendar(mount, onPick){
+  let view = new Date(); view.setDate(1);
+  let startSel = null, endSel = null;
+
+  const monthNames = ["มกราคม","กุมภาพันธ์","มีนาคม","เมษายน","พฤษภาคม","มิถุนายน",
+                      "กรกฎาคม","สิงหาคม","กันยายน","ตุลาคม","พฤศจิกายน","ธันวาคม"];
+  const dows = ["อา","จ","อ","พ","พฤ","ศ","ส"];
+  const all = DB.getAll();
+  const dateTs = d => { const [dd,mm,yy]=String(d).split("/"); return new Date(+yy,+mm-1,+dd).getTime(); };
+  const hasData = ts => all.some(r=>{ const t=dateTs(r.date); return t===ts; });
+
+  function draw(){
+    const y=view.getFullYear(), m=view.getMonth();
+    const first = new Date(y,m,1).getDay();
+    const days  = new Date(y,m+1,0).getDate();
+    let html = `<div class="cal-nav">
+        <button data-nav="prev">‹</button>
+        <span class="month">${monthNames[m]} ${y+543}</span>
+        <button data-nav="next">›</button>
+      </div><div class="cal-grid">`;
+    dows.forEach(d=> html += `<div class="dow">${d}</div>`);
+    for(let i=0;i<first;i++) html += `<div class="cal-cell empty"></div>`;
+    const sTs = startSel?startSel.getTime():null;
+    const eTs = endSel?endSel.getTime():null;
+    for(let d=1; d<=days; d++){
+      const cellDate = new Date(y,m,d);
+      const ts = cellDate.getTime();
+      let cls = "cal-cell";
+      if(hasData(ts)) cls += " has";
+      if(sTs && eTs){
+        if(ts>=Math.min(sTs,eTs) && ts<=Math.max(sTs,eTs)) cls += " inrange";
+        if(ts===sTs||ts===eTs) cls = cls.replace("inrange","")+" sel";
+      }else if(sTs && ts===sTs){ cls += " sel"; }
+      html += `<div class="${cls}" data-day="${d}">${d}</div>`;
+    }
+    html += `</div>`;
+    mount.innerHTML = html;
+
+    mount.querySelector('[data-nav="prev"]').onclick = ()=>{ view.setMonth(m-1); draw(); };
+    mount.querySelector('[data-nav="next"]').onclick = ()=>{ view.setMonth(m+1); draw(); };
+    mount.querySelectorAll('[data-day]').forEach(c=>{
+      c.onclick = ()=>{
+        const d = Number(c.dataset.day);
+        const chosen = new Date(y,m,d);
+        if(!startSel || (startSel && endSel)){ startSel = chosen; endSel = null; }
+        else { endSel = chosen; }
+        draw();
+        onPick(startSel, endSel);
+      };
+    });
+  }
+  draw();
+  return { getRange:()=>({start:startSel,end:endSel}) };
+}
+
+const ddFrom = d => `${pad(d.getDate())}/${pad(d.getMonth()+1)}/${d.getFullYear()}`;
+
+/* ===================== History modal ===================== */
+$('#historyBtn').onclick = () => {
+  $('#historyModal').classList.add("show");
+  const cal = buildCalendar($('#histCal'), (s,e)=>{
+    if(!s) { $('#histRecs').innerHTML=""; return; }
+    const fromD = ddFrom(s), toD = e? ddFrom(e): fromD;
+    const recs = DB.getByDateRange(fromD, toD);
+    $('#histRecs').innerHTML = recs.length? recs.map(r=>
+      `<div class="rec"><div class="r1">${fmtDate(r.date)} - ${r.time} : ${fmtMoney(r.amount)}
+         <span class="row-tag ${r.type==='income'?'tag-income':'tag-expense'}">${r.type==='income'?'รายรับ':'รายจ่าย'}</span></div>
+       <div class="r2">${r.from_acc||r.to_acc?('โอนจาก '+(r.from_acc||'-')+' ไป '+(r.to_acc||'-')):'-'}</div></div>`
+    ).join("") : `<div class="empty">ไม่มีข้อมูลในช่วงวันที่ที่เลือก</div>`;
+  });
+};
+
+/* ===================== Export modal ===================== */
+let exportRange = null;
+$('#exportBtn').onclick = () => {
+  $('#exportModal').classList.add("show");
+  $('#doExportBtn').disabled = true;
+  $('#expRecs').innerHTML = "";
+  buildCalendar($('#expCal'), (s,e)=>{
+    if(!s){ exportRange=null; $('#doExportBtn').disabled=true; $('#expRecs').innerHTML=""; return; }
+    if(!e){ exportRange={from:ddFrom(s),to:ddFrom(s)}; $('#expRecs').innerHTML=`<div class="empty">เลือกวันสิ้นสุดด้วย</div>`; $('#doExportBtn').disabled=true; return; }
+    const from=ddFrom(s), to=ddFrom(e);
+    const a=new Date(s), b=new Date(e);
+    const f=ddFrom(a<b?a:b), t=ddFrom(a<b?b:a);
+    exportRange={from:f,to:t};
+    const recs = DB.getByDateRange(f,t);
+    $('#expRecs').innerHTML = recs.length? recs.map(r=>
+      `<div class="rec"><div class="r1">${fmtDate(r.date)} - ${r.time} : ${fmtMoney(r.amount)}</div>
+       <div class="r2">${r.from_acc||r.to_acc?('โอนจาก '+(r.from_acc||'-')+' ไป '+(r.to_acc||'-')):'-'}</div></div>`
+    ).join("") : `<div class="empty">ไม่มีข้อมูลในช่วงที่เลือก</div>`;
+    $('#doExportBtn').disabled = recs.length===0;
+  });
+};
+
+/* ---------- Export to Export.xlsx (shared columns) ---------- */
+$('#doExportBtn').onclick = () => {
+  if(!exportRange) return;
+  const recs = DB.getByDateRange(exportRange.from, exportRange.to);
+  if(!recs.length){ toast("ไม่มีข้อมูลให้ Export"); return; }
+  // columns match db.sql / db.js / export.xlsx header row
+  const headers = ["No.","Date","Time","From","To","Amount","Type","Note","Created At"];
+  const keys    = ["id","date","time","from_acc","to_acc","amount","type","note","created_at"];
+  const aoa = [headers, ...recs.map(r=> keys.map(k=> r[k]))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "expense_data");
+  XLSX.writeFile(wb, "Export.xlsx");
+  toast("Export เป็น Export.xlsx แล้ว");
+};
+
+/* ---------- close modals (X button / backdrop) ---------- */
+$$('[data-close]').forEach(b=> b.onclick = ()=> b.closest(".modal").classList.remove("show"));
+$$(".modal").forEach(m=> m.addEventListener("click", e=>{ if(e.target===m) m.classList.remove("show"); }));
+
+/* ---------- helpers ---------- */
+function escapeHtml(s){ return (s||"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------- init ---------- */
+render();
+</script>
+</body>
+</html>
